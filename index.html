@@ -1,0 +1,809 @@
+<html>
+  <head>
+    <link rel="shortcut icon" href="#" />
+    <meta charset="utf-8" />
+    <script src="https://unpkg.com/@croquet/croquet@0.4.0"></script>
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <audio id="shotmade" src="https://cdn.glitch.com/7a8fa266-0ad4-4181-b733-8d99fa66bcda%2FBasketball%20Swish%20sound%20effect.mp3?v=1628054121106"></audio>
+    <audio id="backboard" src="https://cdn.glitch.com/7a8fa266-0ad4-4181-b733-8d99fa66bcda%2FPunch%20Hit%20Sound%20Effect.mp3?v=1628123025417"></audio>
+  </head>
+  <body>
+    <button id="startGame" style="position:fixed; left:48%; top: 10%; z-index:1">
+      Start New Round
+    </button>
+    <h1 id="numberOfPlayers" style="position:fixed; left:48%; top: 1%; z-index:1">
+      
+    </h1>
+    <button id="connectDev" style="position:fixed; left:48%; top: 7%; z-index:1">
+      Connect Device
+    </button>
+    <button id="help" style="position:fixed; z-index:1; width: 50px; height:50px; left: 97%">
+      Help
+    </button>
+    
+    <h2 id="helpText" style="position:fixed; z-index:1; width: 170px; height:50px; left: 90%; top: 10%">
+      Make sure to Press and hold your TrackPad/Mouse, keep for 1-2 seconds, then release to shoot. 
+      
+      <br>
+      <br>
+      
+      Connect your Arduino with given code, then treat the Arduino as if you are shooting a basketball.
+    </h2>
+    
+    <p id="scoreboard" style="position:fixed; left: 46%; top: 10%; border: 1px dashed black; font-size:100; z-index:1">
+      0 - 0
+    </p>
+    <a-scene>
+      
+      <a-assets>
+        <a-asset-item
+          id="slingshotmodel"
+          src="https://cdn.glitch.com/a6bbc220-b0da-44dd-af6b-6f3ed08c144f%2Fscene%20(9).glb?v=1627938310720"
+        ></a-asset-item>
+        <a-asset-item
+          id="basketballcourtmodel"
+          src="https://cdn.glitch.com/a6bbc220-b0da-44dd-af6b-6f3ed08c144f%2Fscene%20(10).glb?v=1627967676250"
+        ></a-asset-item>
+        <img id="basketballSource" src="https://cdn.glitch.com/7a8fa266-0ad4-4181-b733-8d99fa66bcda%2Fbasketballtexture1.png?v=1628105492687">
+      </a-assets>
+      
+      
+      <a-light intensity="0.6" type="point" position="-15.041 7.719 -18.926"></a-light>
+      <a-light intensity="0.7" type="point" position="15.341 7.719 -18.926"></a-light>
+      <a-light intensity="0.7" type="spot" position="0.000 6.062 -0.567"></a-light>
+      <a-sky color="lightblue"></a-sky>
+      <a-sphere
+        id="ball"
+        material="src: https://cdn.glitch.com/7a8fa266-0ad4-4181-b733-8d99fa66bcda%2Fbasketballtexture1.png?v=1628105492687"
+        color="orange"
+        position="-0.8 2 0"
+        scale="0.5 0.5 0.5"
+        radius="0.5"
+      ></a-sphere>
+      <a-sphere
+        id="ball1"
+        color="orange"
+        position="100 100 100"
+        scale="0.5 0.5 0.5"
+        radius="0.5"
+      ></a-sphere>
+      <a-sphere
+        id="ball2"
+        color="orange"
+        position="100 100 100"
+        scale="0.5 0.5 0.5"
+        radius="0.5"
+      ></a-sphere>
+
+      <a-entity
+        camera
+        id="camera"
+        position="-1 2.5 5"
+        active="true"
+      ></a-entity>
+
+      
+
+      <a-entity
+        gltf-model="#basketballcourtmodel"
+        id="basketballcourt"
+        position="0 -8 0"
+        rotation="0 90 0"
+        scale="10 10 10"
+      ></a-entity>
+    </a-scene>
+    
+
+    <script>
+      
+      let visibleDirections = false;
+      document.getElementById("helpText").style.visibility = "hidden"
+      
+      document.getElementById("help").addEventListener("click", function() {
+        if (visibleDirections == true) {
+          document.getElementById("helpText").style.visibility = "hidden"
+          visibleDirections = false;
+        } else {
+          document.getElementById("helpText").style.visibility = "visible"
+          visibleDirections = true;
+        }
+      })
+      
+      document.getElementById("backboard").volume = 0.4
+      document.getElementById("connectDev").addEventListener("click", function() {
+          navigator.bluetooth
+            .requestDevice({
+              filters: [{ services: [serviceUUID2] }]
+            })
+            .then(_device2 => {
+              device2 = _device2;
+
+              console.log("got device " + device2);
+              return device2.gatt.connect();
+            })
+            .then(() => {
+              console.log("Device Connected");
+              return device2.gatt.getPrimaryService(serviceUUID2);
+            })
+            .then(_service2 => {
+              service2 = _service2;
+              return service2.getCharacteristic(characteristicUUID2);
+            })
+            .then(_characteristic2 => {
+              characteristic2 = _characteristic2;
+              characteristic2.addEventListener(
+                "characteristicvaluechanged",
+                data2
+              );
+              return characteristic2.startNotifications();
+            });
+      })
+
+      let serviceUUID2 = "3e1feeec-b4dc-495b-b117-b71d7a0fbe1b";
+      let characteristicUUID2 = "9116561c-c7cd-4002-9376-f5c0661761b0";
+
+      let deviceUsing;
+      
+
+      let xAccel;
+      let yAccel;
+      let zAccel;
+
+      let ballVelocityX = 0;
+      let ballVelocityY = 0;
+      let ballVelocityZ = 0;
+
+      let mag;
+      let launched = false;
+      let score = 0;
+      let shotMade = false;
+
+
+      function data2() {
+        xAccel = characteristic2.value.getFloat32(0, true) - 0.8
+        yAccel = characteristic2.value.getFloat32(4, true)
+        zAccel = characteristic2.value.getFloat32(8, true) + 0.6
+        mag = Math.pow(Math.pow(xAccel, 2) + Math.pow(yAccel, 2) + Math.pow(zAccel, 2) , 0.5);
+
+
+        if ((mag >= 2) && (launched == false)) {
+          launched = true;
+          ballVelocityX = (Math.random() - 0.005) * 0.005
+          ballVelocityY = (yAccel * 0.3) + 0.9;
+          ballVelocityZ = -Math.abs(xAccel) * 0.3;
+          deviceUsing = 0
+          
+          window.setTimeout(() => {
+            if (launched == true) {
+              ballVelocityX = 0;
+              ballVelocityY = 0;
+              ballVelocityZ = 0;
+              ball.object3D.position.set(-0.8, 2, 0);
+              launched = false;
+              deviceUsing = 5;
+              if (shotMade == true) {
+                score++;
+                shotMade = false;
+              }
+            }
+          }, 3000)
+        }
+
+      }
+
+      document.addEventListener("keypress", function(e) {
+        if (e.key == "r") {
+          ballVelocityX = 0;
+          ballVelocityY = 0;
+          ballVelocityZ = 0;
+          ball.object3D.position.set(-0.8, 2, 0);
+          launched = false;
+          deviceUsing = 5;
+        } else if (e.key == "l") {
+          if (launched == false) {
+            ball.object3D.position.set(-0.8, 2, 0);
+            ballVelocityX = 0;
+            ballVelocityY = 0.5;
+            ballVelocityZ = -0.5;
+            launched = true
+          } else if (launched == true) {
+            ball.object3D.position.set(-0.8, 2, 0);
+            ballVelocityX = 0;
+            ballVelocityY = 0;
+            ballVelocityZ = 0;
+            if (shotMade == true) {
+              score++;
+              shotMade = false;
+            }
+            launched = false;
+          }
+        }
+      })
+
+
+
+
+
+      let applePencilPressure;
+      let xPosition;
+      let yPosition;
+
+      let screenHeight = window.screen.height;
+      let screenWidth = window.screen.width;
+
+      let camera = document.getElementById("camera")
+      let ball = document.getElementById("ball");
+      let slingshot = document.getElementById("slingshot");
+
+      let xPositionRelative;
+      let yPositionRelative;
+
+      let pencilPressure;
+
+      let hitBackBoard = false;
+      let swishSoundOn = false;
+
+
+      let positionVector;
+
+      document.addEventListener("pointermove", function(dataArray){
+        deviceUsing = 1;
+        if ((launched == false) && (deviceUsing != 0)) {
+          applePencilPressure = dataArray.pressure;
+          xPosition = dataArray.x;
+          yPosition = dataArray.y;
+
+          pencilPressure = dataArray.pressure;
+          
+          if (shotMade == true) {
+            score++;
+            shotMade = false;
+            
+            hitBackBoard = false;
+            swishSoundOn = false;
+          }
+
+          xPositionRelative = ((xPosition - (screenWidth / 2)) - 12);
+          yPositionRelative = (yPosition - 269);
+
+          ball.object3D.position.x = (((((xPositionRelative / 200) - 0.8) * (2.1)) + 0.9) - (xPositionRelative * 0.002)) - 1.5;
+          ball.object3D.position.y = ((((2 - (yPositionRelative / 100)) + 2) + (yPositionRelative * 0.0005))) + 0.5;
+          ball.object3D.position.z = pencilPressure * 2.3
+
+          positionVector = new THREE.Vector3(ball.object3D.position.x, ball.object3D.position.y, ball.object3D.position.z);
+        }
+      });
+
+      document.addEventListener("pointerup", function(dataArray) {
+        deviceUsing = 1;
+        if ((launched == false) && (deviceUsing == 1)) {
+          ballVelocityX -= (positionVector.x + 0.8) * 0.5;
+          ballVelocityY -= (positionVector.y - 2) * 0.5;
+          ballVelocityZ -= positionVector.z * 0.4;
+          launched = true;
+        }
+      })
+
+      document.addEventListener("pointermove", function() {
+        deviceUsing = 1
+        if ((launched == true) && (deviceUsing == 1)) {
+          window.setTimeout(() => {
+            ballVelocityX = 0;
+            ballVelocityY = 0;
+            ballVelocityZ = 0;
+            launched = false;
+          }, 2000)
+        }
+      })
+      
+      
+      
+    
+
+      window.setInterval(() => {
+        if (launched == true) {
+          ball.object3D.position.x += (ballVelocityX) / 10;
+          ball.object3D.position.y += (ballVelocityY) / 10;
+          ball.object3D.position.z += (ballVelocityZ) / 4;
+
+          ballVelocityY -= 0.005;
+
+          if ((ball.object3D.position.z > -20) && (ball.object3D.position.z < -17.5)) {
+            if ((ball.object3D.position.x < 1.3) && (ball.object3D.position.x > -1.1)) {
+              if ((ball.object3D.position.y < 2.3) && (ball.object3D.position.y > 1.6)) {
+                
+                
+                //document.getElementById("shotmade").play();
+                swishSoundOn = true;
+                hitBackBoard = false;
+                
+                ball.object3D.position.set(-19, -0.1, 1.95);
+                ballVelocityX = 0;
+                ballVelocityY = -0.1;
+                ballVelocityZ = 0;
+                
+                ball.object3D.position.set(-0.143, 1.112, -18.905);
+                              
+                shotMade = true;
+                
+                
+                
+               
+              }
+            }
+          }
+          
+          console.log(hitBackBoard, swishSoundOn);
+          
+          if ((ball.object3D.position.z >= -20.383) && (ball.object3D.position.z <= -19.931) && (ball.object3D.position.y >= 0.699) && (ball.object3D.position.y <= 4.761) && (ball.object3D.position.x >= -2.875) && (ball.object3D.position.x <= 2.638)) {
+            hitBackBoard = true;
+            
+            //document.getElementById("backboard").play();
+            ballVelocityZ *= -0.3;
+          }
+          
+          if (ball.object3D.position.y <= -6.205) {
+            ballVelocityY *= -0.6;
+          }
+          
+          
+
+
+        }
+        
+  
+        
+      })
+      
+      
+
+
+
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+
+
+
+      class Model extends Croquet.Model {
+        init() {
+          this.subscribe(this.sessionId, "view-join", this.viewJoin);
+          this.subscribe(this.sessionId, "view-exit", this.viewExit);
+          
+          this.users = [];
+          
+          this.indexToViewId = new Map();
+          this.indexToScore = new Map();
+          this.indexToBallPosition = new Map();
+          this.test = 2;
+          
+          // For Battery Saving Purposes
+          this.gameRunning = false;
+          
+          for (let i = 0; i < 20; i++) {
+            this.indexToViewId.set(i, "no");
+          }
+          
+          this.subscribe("new", "game", this.startNewGame);
+          
+          this.subscribe("ball", "position", this.processBallData);
+          
+          this.subscribe("user", "score", this.manageUserScore);
+          
+          this.subscribe("sfx", "sound", this.playSound)
+          
+          
+          this.activeUsers = new Map();
+          this.numberOfUsers = 0;
+          this.future(1000).checkWinnerScore();
+          
+          
+          this.future(1000).logUserData()
+          
+          this.future(5000).sendUserCount();
+          
+          this.future(1).sendBallData()
+          
+        }
+        
+        sendUserCount() {
+          this.publish("user", "count", this.users.length);
+          this.future(5000).sendUserCount();
+        }
+        
+        playSound(effect) {
+          if (effect == "backboard") {
+            document.getElementById("backboard").play();
+            hitBackBoard = false;
+          } else if (effect == "swish") {
+            document.getElementById("shotmade").play();
+            swishSoundOn = false;
+          }
+          
+        }
+        
+        manageUserScore(data) {
+          this.indexToScore.set(data.userid, data.thisScore);
+        }
+        
+        sendBallData() {
+          if (this.gameRunning == true) {
+            this.publish("ball", "positionDataToView", {map: this.indexToBallPosition});
+            this.publish("publishUserScores", "publish", {map: this.indexToScore});
+          }
+          this.future(1).sendBallData();
+        }
+        
+        static types() {
+          return {
+            "THREE.Vector3": THREE.Vector3
+          }
+        }
+        
+        processBallData(data) {
+          if (data.isUser1 == true) {
+            this.indexToBallPosition.set(1, data.ballPosition);
+          } else {
+            this.indexToBallPosition.set(2, data.ballPosition);
+          }
+        }
+        
+        startNewGame() {
+          this.indexToScore.clear();
+          this.numberOfUsers = 0;
+          this.activeUsers.clear();
+          this.publish("reset", "scores");
+          /*for (let [key, value] of this.indexToViewId) {
+            if (value != "no") {
+              this.numberOfUsers++;
+              this.activeUsers.set(this.numberOfUsers, value);
+            }
+            
+            if (this.numberOfUsers >= 2) {
+              this.publish("first2ToJoin", "letsgo", {user1: this.activeUsers.get(1), user2: this.activeUsers.get(2)});
+              console.log(this.activeUsers);
+              this.indexToScore.set(this.activeUsers.get(1), 0);
+              this.indexToScore.set(this.activeUsers.get(2), 0);
+              this.gameRunning = true;
+            } else {
+              this.gameRunning = false;
+            }
+            
+          }*/
+          
+          let activeUserList = [];
+          for (let i = 0; i < this.users.length; i++) {
+            activeUserList.push(this.users[i]);
+          }
+          let randomPlayer1 = activeUserList[Math.floor(Math.random() * (activeUserList.length - 1))];
+          this.activeUsers.set(1, randomPlayer1);
+          
+          activeUserList.splice(activeUserList.indexOf(randomPlayer1), 1);
+          
+          let randomPlayer2 = activeUserList[Math.floor(Math.random() * (activeUserList.length - 1))]
+          this.activeUsers.set(2, randomPlayer2);
+          activeUserList.splice(activeUserList.indexOf(randomPlayer2), 1);
+          
+          
+          this.gameRunning = true;
+          this.indexToScore.set(this.activeUsers.get(2), 0);
+          this.indexToScore.set(this.activeUsers.get(1), 0);
+          this.publish("first2ToJoin", "letsgo", {user1: this.activeUsers.get(1), user2: this.activeUsers.get(2)});
+          
+          
+          
+          
+          
+          
+          
+        }
+        
+        checkWinnerScore() {
+          let winner;
+          let loser;
+          for (let [key, value] of this.indexToScore) {
+            if (value >= 10) {
+              winner = key;
+              for (let [key, value] of this.indexToScore) {
+                if ((key != winner)) {
+                  loser = key;
+                  this.publish("winner", "person", {winnerId: winner, loserId: loser});
+                  window.setTimeout(() => {
+                    this.startNewGame();
+                  }, 3000)
+                  break;
+                }
+              }
+              break;
+            }
+          }
+          
+          
+          
+          
+          
+          
+          
+          this.future(1000).checkWinnerScore();
+        }
+        
+        
+        
+        logUserData() {
+          console.log(this.users)
+          this.publish("sendUserIndex", "data", {map: this.indexToViewId});
+          
+          
+          
+          
+          
+          // First 2 users get to play!
+          
+          
+          this.future(2000).logUserData()
+        }
+        
+        viewJoin(viewId) {
+          this.users.push(viewId);
+          for (let [key, value] of this.indexToViewId) {
+            if (value == "no") {
+              this.indexToViewId.set(key, viewId);
+              break;
+            }
+          }
+          
+          if (this.users.length >= 2) {
+            if (this.gameRunning == false) {
+              this.startNewGame();
+              this.gameRunning = true;
+            }
+          }
+          
+          this.publish("user", "count", this.users.length);
+        }
+        
+        viewExit(viewId) {
+          this.users.splice(this.users.indexOf(viewId), 1);
+          for (let [key, value] of this.indexToViewId) {
+            if (value == viewId) {
+              this.indexToViewId.set(key, "no");
+              break;
+            }
+          }
+          
+          for (let [key, value] of this.activeUsers) {
+            if (value == viewId) {
+              this.startNewGame();
+            }
+          }
+          this.publish("user", "count", this.users.length);
+        }
+        
+      }
+      Model.register("Model");
+      
+      class View extends Croquet.View {
+        constructor(model) {
+          super(model);
+          this.model = model;
+          
+          this.sendingData = false;
+          
+          this.index;
+          
+          this.isUser1 = false;
+          this.thisScore = score;
+          this.thisShotMade = shotMade;
+          
+          this.subscribe("sendUserIndex", "data", this.setIndex);
+          
+          this.subscribe("first2ToJoin", "letsgo", this.isThisPlayerUp);
+          
+          this.subscribe("ball", "positionDataToView", this.renderBalls);
+          
+          this.subscribe("publishUserScores", "publish", this.showScoreText)
+          
+          this.subscribe("reset", "scores", this.resetScore)
+          
+          this.subscribe("winner", "person", this.checkWinner);
+          
+          this.scoreShowing = true;
+          
+          this.subscribe("user", "count", this.setUserCountText)
+          
+          
+          document.getElementById("startGame").addEventListener("click", () => {
+            this.publish("new", "game");
+          })
+          
+          window.setInterval(() => {
+            if (this.sendingData == true) {
+              this.publish("ball", "position", {ballPosition: document.getElementById("ball").object3D.position, isUser1: this.isUser1});
+              this.publish("user", "score", {thisScore: score, index: this.index, userid: this.viewId});
+            } else if (this.sendingData == false) {
+              this.thisScore = 0;
+              this.thisShotMade = false;
+            }
+          })
+        }
+        
+        setUserCountText(count) {
+          document.getElementById("numberOfPlayers").textContent = `Users: ${count}`;
+        }
+        
+        checkWinner(data) {
+          this.scoreShowing = false;
+          if (data.loserId == this.viewId) {
+            document.getElementById("scoreboard").textContent = "You Lose :(";
+            this.sendingData = false;
+          } else if (data.winnerId == this.viewId) {
+            document.getElementById("scoreboard").textContent = "You Win!";
+            this.sendingData = false;
+          }
+          
+          window.setTimeout(() => {
+            this.scoreShowing = true;
+          }, 3000)
+          console.log(data.winnerId, data.loserId);
+        }
+        
+        resetScore() {
+          score = 0;
+          this.isUser1 = false;
+          this.sendingData = false;
+        }
+        
+        showScoreText(data) {
+          if (this.scoreShowing == true) {
+            let score1;
+            let score2;
+
+            let takenNamesPlayingDEBUG = [];
+
+            for (let [key, value] of data.map) {
+              takenNamesPlayingDEBUG.push(key);
+            }
+
+            for (let [key, value] of data.map) {
+              if (!takenNamesPlayingDEBUG.includes(key)) {
+                takenNamesPlayingDEBUG.push(key);
+              }
+            }
+            
+            for (let [key, value] of data.map) {
+              if ((data.map.get(takenNamesPlayingDEBUG[0]) != undefined) && (data.map.get(takenNamesPlayingDEBUG[1]) != undefined) && (this.sendingData == false)) {
+                document.getElementById("scoreboard").textContent = `${data.map.get(takenNamesPlayingDEBUG[0])} - ${data.map.get(takenNamesPlayingDEBUG[1])}`;
+              }
+              
+              if ((data.map.get(takenNamesPlayingDEBUG[0]) == score) && (this.sendingData == true)) {
+                document.getElementById("scoreboard").textContent = `(you) ${data.map.get(takenNamesPlayingDEBUG[0])} - ${data.map.get(takenNamesPlayingDEBUG[1])}`;
+              }
+              
+              if ((data.map.get(takenNamesPlayingDEBUG[1]) == score) && (this.sendingData == true)) {
+                document.getElementById("scoreboard").textContent = `${data.map.get(takenNamesPlayingDEBUG[0])} - (you) ${data.map.get(takenNamesPlayingDEBUG[1])}`;
+              }
+              
+              
+            }
+          
+          }
+        }
+        
+        renderBalls(data) {
+          for (let [key, value] of data.map) {
+            //document.getElementById("scoreboard").textContent = `${this.isUser1}, ${this.sendingData}`;
+            
+            // From above: user 1 returns true, true.... user 2 returns false, true... Good!
+            
+            
+            if (this.sendingData == true) {
+              
+              if (key == 1) {
+                if (this.isUser1 == false) {
+                  document.getElementById("ball1").object3D.position.set(value.x, value.y, value.z);
+                }
+              } else if (key == 2) {
+                if (this.isUser1 == true) {
+                  document.getElementById("ball2").object3D.position.set(value.x, value.y, value.z);
+                }
+              }
+              
+            } else if (this.sendingData == false) {
+              
+              if (key == 1) {
+                document.getElementById("ball1").object3D.position.set(value.x, value.y, value.z);
+              } else if (key == 2) {
+                document.getElementById("ball2").object3D.position.set(value.x, value.y, value.z);
+              }
+              
+            }
+            
+            
+            
+            
+            
+          }
+          
+          
+          if (this.sendingData == false) {
+            document.getElementById("camera").object3D.position.set(-30, 10, -30);
+            document.getElementById("camera").object3D.rotation.set(0, 230, 0);
+            document.getElementById("startGame").style.visibility = "false";
+          } else if (this.sendingData == true) {
+            document.getElementById("camera").object3D.position.set(-1, 2.5, 5);
+            document.getElementById("camera").object3D.rotation.set(0, 0, 0);
+            document.getElementById("startGame").style.visibility = "true";
+          }
+          
+          //let  hitBackBoard
+          //let  swishSoundOn
+          
+          if (hitBackBoard == true) {
+            this.publish("sfx", "sound", "backboard");
+          }
+          
+          if (swishSoundOn == true) {
+            this.publish("sfx", "sound", "swish");
+          }
+          
+          
+          
+        }
+        
+        isThisPlayerUp(data) {
+          if (data.user1 == this.viewId) {
+            this.sendingData = true;
+            this.isUser1 = true;
+            this.thisScore = 0;
+            this.thisShotMade = false;
+          }
+          
+          if (data.user2 == this.viewId) {
+            this.sendingData = true;
+            this.isUser1 = false;
+            this.thisScore = 0;
+            this.thisShotMade = false;
+          }
+          
+          if ((data.user1 != this.viewId) && (data.user2 != this.viewId)) {
+            this.sendingData = false;
+            this.isUser1 = 5;
+            this.thisScore = 0;
+            this.thisShotMade = false;
+          }
+          
+          
+        }
+        
+        
+        
+        setIndex(data) {
+          console.log("working");
+          for (let [key, value] of data.map) {
+            if (value == this.viewId) {
+              this.index = key;
+              break;
+            }
+          }
+        }
+        
+      }
+
+      Croquet.Session.join({
+        appId: "io.croquet.hello",
+        name: "nhkjnbk",
+        password: "k",
+        model: Model,
+        view: View
+      });
+    </script>
+  </body>
+</html>
